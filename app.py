@@ -5,14 +5,45 @@ from datetime import datetime, timedelta
 import plotly.express as px
 
 # 1. CONFIGURAÇÃO DA PÁGINA
-st.set_page_config(page_title="Barriguinha Admin v1.6", layout="wide", page_icon="📊")
+st.set_page_config(page_title="Barriguinha Admin v1.5", layout="wide", page_icon="📊")
 
-# Design CSS Adaptável (Modo Claro/Escuro)
+# Design CSS Reforçado e Adaptável (v1.5.1)
 st.markdown("""
     <style>
-    .stButton>button { width: 100%; border-radius: 8px; background-color: #FF8C00; color: white !important; font-weight: bold; height: 3.5em; border: none; }
-    [data-testid="stMetricValue"] { color: #FF8C00 !important; font-weight: bold; }
-    div[data-testid="stMetric"] { background-color: rgba(128, 128, 128, 0.1); padding: 15px; border-radius: 10px; border-left: 5px solid #FF8C00; }
+    /* Botão Principal */
+    .stButton>button { 
+        width: 100%; 
+        border-radius: 8px; 
+        background-color: #FF8C00; 
+        color: white !important; 
+        font-weight: bold; 
+        height: 3.5em; 
+        border: none; 
+    }
+    
+    /* Ajuste das Métricas para Modo Escuro/Claro */
+    [data-testid="stMetricValue"] { 
+        color: #FF8C00 !important; 
+        font-weight: bold;
+    }
+    
+    [data-testid="stMetricLabel"] {
+        color: gray !important;
+    }
+
+    /* Container das métricas */
+    div[data-testid="stMetric"] {
+        background-color: rgba(128, 128, 128, 0.1); /* Fundo sutil que funciona em ambos os modos */
+        padding: 15px;
+        border-radius: 10px;
+        border-left: 5px solid #FF8C00;
+    }
+
+    /* Estilo do Expander */
+    div[data-testid="stExpander"] { 
+        border: none; 
+        box-shadow: 2px 2px 10px rgba(0,0,0,0.2); 
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -27,6 +58,8 @@ def check_password():
     if "password_correct" not in st.session_state or not st.session_state["password_correct"]:
         st.title("🔐 Acesso Administrativo")
         st.text_input("Senha:", type="password", on_change=password_entered, key="password_input")
+        if "password_correct" in st.session_state and not st.session_state["password_correct"]:
+            st.error("Senha Incorreta")
         return False
     return True
 
@@ -34,136 +67,123 @@ if check_password():
     conn = st.connection("gsheets", type=GSheetsConnection)
 
     def load_data():
-        try:
-            df = conn.read(worksheet="Vendas", ttl=0)
-            if not df.empty:
-                df['Data_Formatada'] = pd.to_datetime(df['Data'], format='%d/%m/%Y')
-                # Criar uma coluna de ID baseada no index para facilitar exclusão
-                df['ID'] = df.index
-            return df
-        except:
-            return pd.DataFrame()
+        df = conn.read(worksheet="Vendas", ttl=0)
+        if not df.empty:
+            df['Data_Formatada'] = pd.to_datetime(df['Data'], format='%d/%m/%Y')
+        return df
 
-    # --- ESTADO DE DATA/HORA ---
+    # --- INICIALIZAÇÃO DE ESTADO PARA DATA/HORA (Correção de Bug) ---
     hora_padrao = datetime.now() - timedelta(hours=3)
-    if "data_venda_v16" not in st.session_state:
-        st.session_state["data_venda_v16"] = hora_padrao.date()
-    if "hora_venda_v16" not in st.session_state:
-        st.session_state["hora_venda_v16"] = hora_padrao.time()
+    if "data_venda_v15" not in st.session_state:
+        st.session_state["data_venda_v15"] = hora_padrao.date()
+    if "hora_venda_v15" not in st.session_state:
+        st.session_state["hora_venda_v15"] = hora_padrao.time()
 
     # --- SIDEBAR ---
-    st.sidebar.header("🎯 Parâmetros")
-    custos_fixos = st.sidebar.number_input("Custos Fixos Mensais", value=300)
-    preco_carne = st.sidebar.number_input("Carne KG", value=34.90)
-    preco_pao = st.sidebar.number_input("Pão (unid)", value=1.47)
+    st.sidebar.header("🎯 Parâmetros do Mês")
+    meta_faturamento = st.sidebar.number_input("Meta Mensal (R$)", value=5000)
+    custos_fixos = st.sidebar.number_input("Custos Fixos (Luz/Internet/MEI)", value=300)
+    
+    st.sidebar.divider()
+    preco_carne = st.sidebar.number_input("Preço Carne KG", value=34.90)
+    preco_pao = st.sidebar.number_input("Preço Pão (4 unid)", value=5.90) / 4
     cmv_base = (preco_carne * 0.12) + preco_pao + 5.30
 
-    tab1, tab2, tab3 = st.tabs(["📝 PDV", "📈 Dashboard BI", "📜 Histórico & Gestão"])
+    # --- ABAS ---
+    tab1, tab2, tab3 = st.tabs(["📝 PDV (Vendas)", "📈 Gestão e BI", "📜 Histórico"])
 
-    # --- TAB 1: PDV ---
+    # --- TAB 1: PDV (Com Correção de Hora) ---
     with tab1:
-        with st.expander("✨ Novo Pedido", expanded=True):
+        with st.expander("✨ Registrar Novo Pedido", expanded=True):
             c1, c2 = st.columns(2)
-            data_sel = c1.date_input("Data", key="data_venda_v16")
-            hora_sel = c2.time_input("Hora", key="hora_venda_v16")
+            # Usando as chaves de estado para manter o valor mesmo após refresh
+            data_sel = c1.date_input("Data da Venda", key="data_venda_v15")
+            hora_sel = c2.time_input("Hora da Venda", key="hora_venda_v15")
             
-            canal = st.radio("Canal", ["WhatsApp", "iFood"], horizontal=True)
-            produto = st.selectbox("Lanche", ["Smash de Responsa", "Artesanal de Lei", "Supremo Barriguinha", "Bruto de Respeito", "Combo Tanquinho", "Combo Pochete", "Combo Barriguinha", "Combo Barrigona", "Combo Pança"])
+            canal = st.radio("Origem", ["WhatsApp", "iFood"], horizontal=True)
+            produto = st.selectbox("O que saiu?", ["Smash de Responsa", "Artesanal de Lei", "Supremo Barriguinha", "Bruto de Respeito", "Combo Tanquinho", "Combo Pochete", "Combo Barriguinha", "Combo Barrigona", "Combo Pança"])
 
             precos = {
                 "iFood": {"Smash de Responsa": 19.9, "Artesanal de Lei": 29.9, "Supremo Barriguinha": 32.9, "Bruto de Respeito": 42.9, "Combo Tanquinho": 39.9, "Combo Pochete": 46.9, "Combo Barriguinha": 49.9, "Combo Barrigona": 59.9, "Combo Pança": 119.9},
                 "WhatsApp": {"Smash de Responsa": 17.9, "Artesanal de Lei": 26.9, "Supremo Barriguinha": 29.9, "Bruto de Respeito": 38.9, "Combo Tanquinho": 32.9, "Combo Pochete": 39.9, "Combo Barriguinha": 44.9, "Combo Barrigona": 52.9, "Combo Pança": 99.9}
             }
             
-            valor_v = precos[canal][produto]
-            st.metric("Valor do Pedido", f"R$ {valor_v:.2f}")
+            valor_venda = precos[canal][produto]
+            st.metric("Total Pedido", f"R$ {valor_venda:.2f}")
 
-            if st.button("🚀 SALVAR PEDIDO"):
+            if st.button("🚀 FINALIZAR E SALVAR"):
                 taxa = 0.26 if canal == "iFood" else 0.0
-                lucro_un = (valor_v * (1 - taxa)) - cmv_base
-                novo = pd.DataFrame([{"Data": data_sel.strftime("%d/%m/%Y"), "Hora": hora_sel.strftime("%H:%M"), "Produto": produto, "Canal": canal, "Valor_Bruto": valor_v, "Lucro_Liquido": round(lucro_un, 2)}])
+                lucro_un = (valor_venda * (1 - taxa)) - cmv_base
                 
-                df_atual = load_data()
-                if not df_atual.empty:
-                    df_final = pd.concat([df_atual.drop(columns=['Data_Formatada', 'ID'], errors='ignore'), novo], ignore_index=True)
-                else:
-                    df_final = novo
+                novo_p = pd.DataFrame([{
+                    "Data": data_sel.strftime("%d/%m/%Y"),
+                    "Hora": hora_sel.strftime("%H:%M"),
+                    "Produto": produto,
+                    "Canal": canal,
+                    "Valor_Bruto": valor_venda,
+                    "Lucro_Liquido": round(lucro_un, 2)
+                }])
                 
-                conn.update(worksheet="Vendas", data=df_final)
-                st.success("Venda salva!")
+                df_antigo = load_data().drop(columns=['Data_Formatada'], errors='ignore')
+                df_novo = pd.concat([df_antigo, novo_p], ignore_index=True)
+                conn.update(worksheet="Vendas", data=df_novo)
+                
+                st.success("Venda registrada com sucesso!")
                 st.balloons()
 
-    # --- TAB 2: DASHBOARD BI ---
+    # --- TAB 2: GESTÃO E BI (Visão de Dono) ---
     with tab2:
         df = load_data()
         if not df.empty:
-            c_f1, c_f2 = st.columns(2)
+            # Filtro de Período
+            col_f1, col_f2 = st.columns(2)
             hoje = datetime.now() - timedelta(hours=3)
-            d_ini = c_f1.date_input("Início", hoje.date() - timedelta(days=7))
-            d_fim = c_f2.date_input("Fim", hoje.date())
+            inicio_mes = hoje.replace(day=1)
+            d_ini = col_f1.date_input("De:", inicio_mes.date())
+            d_fim = col_f2.date_input("Até:", hoje.date())
             
             df_f = df[(df['Data_Formatada'].dt.date >= d_ini) & (df['Data_Formatada'].dt.date <= d_fim)]
 
+            # MÉTRICAS DE GESTÃO
             m1, m2, m3 = st.columns(3)
-            fat = df_f['Valor_Bruto'].sum()
-            lucro = df_f['Lucro_Liquido'].sum()
-            m1.metric("Faturamento", f"R$ {fat:.2f}")
-            m2.metric("Lucro Op.", f"R$ {lucro:.2f}")
+            fat_bruto = df_f['Valor_Bruto'].sum()
+            lucro_op = df_f['Lucro_Liquido'].sum()
             
-            pago = lucro - custos_fixos
-            m3.metric("Sobrou no Bolso", f"R$ {pago:.2f}", delta="Pós Custos Fixos")
+            m1.metric("Faturamento Período", f"R$ {fat_bruto:.2f}")
+            m2.metric("Lucro Operacional (Bruto)", f"R$ {lucro_op:.2f}")
+            
+            # --- LÓGICA DE PONTO DE EQUILÍBRIO (BREAK-EVEN) ---
+            ticket_medio_lucro = lucro_op / len(df_f) if len(df_f) > 0 else 0
+            falta_pagar = custos_fixos - lucro_op
+            
+            if falta_pagar > 0:
+                lanches_faltantes = int(falta_pagar / ticket_medio_lucro) if ticket_medio_lucro > 0 else 0
+                m3.metric("Falta p/ Pagar Contas", f"R$ {falta_pagar:.2f}", delta=f"{lanches_faltantes} lanches", delta_color="inverse")
+                st.warning(f"💡 Você ainda precisa lucrar **R$ {falta_pagar:.2f}** para cobrir seus custos fixos de R$ {custos_fixos:.2f}. Isso equivale a aproximadamente **{lanches_faltantes} pedidos**.")
+            else:
+                m3.metric("Status Mensal", "PAGO!", delta="Lucro Real Ativo", delta_color="normal")
+                st.success(f"🚀 Parabéns! Você já cobriu os custos fixos e está no **Lucro Real de R$ {abs(falta_pagar):.2f}**.")
 
             st.divider()
             
-            # Gráficos de Vendas
-            col_g1, col_g2 = st.columns(2)
-            with col_g1:
+            # GRÁFICOS
+            c_g1, c_g2 = st.columns(2)
+            with c_g1:
                 v_dia = df_f.groupby('Data_Formatada')['Valor_Bruto'].sum().reset_index()
-                st.plotly_chart(px.line(v_dia, x='Data_Formatada', y='Valor_Bruto', title="Evolução Diária (Macro)", markers=True, color_discrete_sequence=['#FF8C00']), use_container_width=True)
-            
-            with col_g2:
-                # Ranking de lanches RESPEITANDO O FILTRO
+                st.plotly_chart(px.line(v_dia, x='Data_Formatada', y='Valor_Bruto', title="Evolução de Vendas", markers=True, color_discrete_sequence=['#FF8C00']), use_container_width=True)
+            with c_g2:
                 rank = df_f.groupby('Produto').size().reset_index(name='Qtd').sort_values('Qtd', ascending=True)
-                st.plotly_chart(px.bar(rank, x='Qtd', y='Produto', orientation='h', title="Mais Vendidos no Período", color_discrete_sequence=['#FF8C00']), use_container_width=True)
+                st.plotly_chart(px.bar(rank, x='Qtd', y='Produto', orientation='h', title="Ranking de Saída", color_discrete_sequence=['#FF8C00']), use_container_width=True)
+        else:
+            st.info("Nenhuma venda registrada para análise.")
 
-            col_g3, col_g4 = st.columns(2)
-            with col_g3:
-                # Pedidos por Hora (Micro)
-                df_f['Hora_H'] = df_f['Hora'].str[:2] + "h"
-                h_rank = df_f.groupby('Hora_H').size().reset_index(name='Qts')
-                st.plotly_chart(px.bar(h_rank, x='Hora_H', y='Qts', title="Picos de Horário", color_discrete_sequence=['#FFA500']), use_container_width=True)
-            
-            with col_g4:
-                # VOLTA DO GRÁFICO DE PIZZA
-                fig_pizza = px.pie(df_f, names='Canal', title="WhatsApp vs iFood", hole=0.4, color_discrete_sequence=['#FF8C00', '#32CD32'])
-                st.plotly_chart(fig_pizza, use_container_width=True)
-
-    # --- TAB 3: HISTÓRICO & GESTÃO (Exclusão Inteligente) ---
+    # --- TAB 3: HISTÓRICO ---
     with tab3:
-        st.subheader("Gerenciar Histórico")
-        df_edit = load_data()
-        
-        if not df_edit.empty:
-            st.write("Selecione os pedidos que deseja remover e clique no botão abaixo:")
-            
-            # Criar editor de dados com checkbox de seleção
-            df_edit['Excluir'] = False
-            # Reorganizar colunas para ficar visualmente fácil
-            cols = ['Excluir', 'Data', 'Hora', 'Produto', 'Canal', 'Valor_Bruto', 'Lucro_Liquido']
-            edited_df = st.data_editor(df_edit[cols].iloc[::-1], hide_index=True, use_container_width=True)
-            
-            c_del1, c_del2 = st.columns(2)
-            
-            if c_del1.button("🗑️ APAGAR SELECIONADOS"):
-                # Filtra as linhas que NÃO foram marcadas para excluir
-                indices_para_manter = edited_df[edited_df['Excluir'] == False].index
-                # Como o editor inverteu a ordem com iloc[::-1], precisamos mapear de volta ou usar a lógica original
-                df_final_delete = df_edit.loc[indices_para_manter].drop(columns=['Data_Formatada', 'ID', 'Excluir'], errors='ignore')
-                conn.update(worksheet="Vendas", data=df_final_delete)
-                st.success("Pedidos removidos!")
-                st.rerun()
-
-            if c_del2.button("🔙 APAGAR ÚLTIMO (RÁPIDO)"):
-                df_rapido = df_edit.drop(df_edit.index[-1]).drop(columns=['Data_Formatada', 'ID', 'Excluir'], errors='ignore')
-                conn.update(worksheet="Vendas", data=df_rapido)
+        st.subheader("Livro de Vendas")
+        df_h = load_data()
+        if not df_h.empty:
+            st.dataframe(df_h.drop(columns=['Data_Formatada']).iloc[::-1], use_container_width=True)
+            if st.button("🗑️ Excluir Último Registro"):
+                df_h = df_h.drop(df_h.index[-1])
+                conn.update(worksheet="Vendas", data=df_h.drop(columns=['Data_Formatada'], errors='ignore'))
                 st.rerun()
