@@ -6,9 +6,9 @@ import plotly.express as px
 import plotly.graph_objects as go
 
 # 1. CONFIGURAÇÃO DA PÁGINA
-st.set_page_config(page_title="Barriguinha Admin v1.8", layout="wide", page_icon="📊")
+st.set_page_config(page_title="Barriguinha Admin v1.9", layout="wide", page_icon="🍔")
 
-# Design CSS para garantir visibilidade em qualquer modo
+# Design CSS
 st.markdown("""
     <style>
     .stButton>button { width: 100%; border-radius: 8px; background-color: #FF8C00; color: white !important; font-weight: bold; height: 3.5em; border: none; }
@@ -17,7 +17,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 2. SISTEMA DE LOGIN
+# 2. SISTEMA DE LOGIN (Com aviso de erro restaurado)
 def check_password():
     def password_entered():
         if st.session_state["password_input"] == "BARRIGA2024":
@@ -28,6 +28,9 @@ def check_password():
     if "password_correct" not in st.session_state or not st.session_state["password_correct"]:
         st.title("🔐 Acesso Administrativo")
         st.text_input("Senha:", type="password", on_change=password_entered, key="password_input")
+        # Mensagem de erro caso a senha esteja errada
+        if "password_correct" in st.session_state and not st.session_state["password_correct"]:
+            st.error("❌ Senha Incorreta! Tente novamente.")
         return False
     return True
 
@@ -43,32 +46,28 @@ if check_password():
         except:
             return pd.DataFrame()
 
-    # --- SIDEBAR: PARÂMETROS E INSUMOS ---
+    # --- SIDEBAR: PARÂMETROS E INSUMOS (Detalhado) ---
     st.sidebar.header("🎯 Metas e Custos Fixos")
-    meta_mensal = st.sidebar.number_input("Meta de Faturamento (R$)", value=5000)
-    custos_fixos = st.sidebar.number_input("Custos Fixos (Luz/MEI/etc)", value=300)
+    meta_mensal = st.sidebar.number_input("Meta de Faturamento (R$)", value=5000.0)
+    custos_fixos = st.sidebar.number_input("Custos Fixos (Luz/MEI/etc)", value=300.0)
     
     st.sidebar.divider()
     st.sidebar.header("🛒 Preço dos Insumos")
-    p_carne = st.sidebar.number_input("Carne KG", value=34.90)
-    p_pao = st.sidebar.number_input("Pão Unit.", value=1.47)
-    p_queijo = st.sidebar.number_input("Queijo (2 fat.)", value=2.10)
-    p_bacon = st.sidebar.number_input("Bacon (30g)", value=1.35)
-    p_salada = st.sidebar.number_input("Alface/Tomate", value=0.80)
-    p_cebola = st.sidebar.number_input("Cebola", value=0.20)
+    p_carne = st.sidebar.number_input("Carne KG (Ref: R$ 34.90)", value=34.90)
+    p_pao = st.sidebar.number_input("Pão Unit. (Ref: R$ 1.47)", value=1.47)
+    p_queijo = st.sidebar.number_input("Queijo (2 fat. - Ref: R$ 2.10)", value=2.10)
+    p_bacon = st.sidebar.number_input("Bacon (30g - Ref: R$ 1.35)", value=1.35)
+    p_salada = st.sidebar.number_input("Alface/Tomate (Ref: R$ 0.80)", value=0.80)
+    p_cebola = st.sidebar.number_input("Cebola (Ref: R$ 0.20)", value=0.20)
     p_fixo = st.sidebar.number_input("Embalagem/Molho", value=2.50)
 
-    # Lógica de cálculo de custo por categoria de lanche
     def calcular_custo_lanche(nome_lanche):
         custo = p_pao + p_fixo
-        if "Smash" in nome_lanche: 
-            custo += (p_carne * 0.09) + p_queijo
-        elif "Artesanal" in nome_lanche: 
-            custo += (p_carne * 0.12) + p_queijo + p_salada
+        if "Smash" in nome_lanche: custo += (p_carne * 0.09) + p_queijo
+        elif "Artesanal" in nome_lanche: custo += (p_carne * 0.12) + p_queijo + p_salada
         elif any(x in nome_lanche for x in ["Supremo", "Bruto", "Combo"]):
             custo += (p_carne * 0.12) + p_queijo + p_bacon + p_salada + p_cebola
-        if "Combo" in nome_lanche: 
-            custo += 4.50 
+        if "Combo" in nome_lanche: custo += 4.50 
         return custo
 
     # --- ABAS ---
@@ -77,8 +76,6 @@ if check_password():
     with tab1:
         st.subheader("Novo Pedido")
         hora_padrao = datetime.now() - timedelta(hours=3)
-        
-        # Correção definitiva para manter data e hora
         if "d_v" not in st.session_state: st.session_state["d_v"] = hora_padrao.date()
         if "h_v" not in st.session_state: st.session_state["h_v"] = hora_padrao.time()
 
@@ -95,17 +92,14 @@ if check_password():
         }
         
         v_venda = precos[canal][produto]
-        st.metric("Valor", f"R$ {v_venda:.2f}")
+        st.metric("Valor a Cobrar", f"R$ {v_venda:.2f}")
 
         if st.button("🚀 REGISTRAR VENDA"):
             taxa = 0.26 if canal == "iFood" else 0.0
             custo_total = calcular_custo_lanche(produto)
-            lucro_final = (v_venda * (1 - taxa)) - custo_total
-            
-            novo = pd.DataFrame([{"Data": data_sel.strftime("%d/%m/%Y"), "Hora": hora_sel.strftime("%H:%M"), "Produto": produto, "Canal": canal, "Valor_Bruto": v_venda, "Lucro_Liquido": round(lucro_final, 2)}])
-            df_atual = load_data()
-            df_final = pd.concat([df_atual.drop(columns=['Data_Formatada'], errors='ignore'), novo], ignore_index=True)
-            conn.update(worksheet="Vendas", data=df_final)
+            lucro = (v_venda * (1 - taxa)) - custo_total
+            novo = pd.DataFrame([{"Data": data_sel.strftime("%d/%m/%Y"), "Hora": hora_sel.strftime("%H:%M"), "Produto": produto, "Canal": canal, "Valor_Bruto": v_venda, "Lucro_Liquido": round(lucro, 2)}])
+            conn.update(worksheet="Vendas", data=pd.concat([load_data().drop(columns=['Data_Formatada'], errors='ignore'), novo], ignore_index=True))
             st.success("Venda salva!")
             st.balloons()
 
@@ -120,44 +114,43 @@ if check_password():
             d_fim = c_f2.date_input("Fim", hoje)
             df_f = df[(df['Data_Formatada'].dt.date >= d_ini) & (df['Data_Formatada'].dt.date <= d_fim)].sort_values('Data_Formatada')
 
+            # --- MÉTRICAS E LÓGICA DO PAGA-CONTAS (Restaurado) ---
             m1, m2, m3 = st.columns(3)
             faturamento_total = df_f['Valor_Bruto'].sum()
             lucro_op = df_f['Lucro_Liquido'].sum()
             
-            m1.metric("Faturamento Período", f"R$ {faturamento_total:.2f}")
+            ticket_medio_lucro = lucro_op / len(df_f) if len(df_f) > 0 else 0
+            falta_pagar = custos_fixos - lucro_op
+
+            m1.metric("Faturamento", f"R$ {faturamento_total:.2f}")
             m2.metric("Lucro Operacional", f"R$ {lucro_op:.2f}")
-            m3.metric("Lucro Real (Pós Fixo)", f"R$ {(lucro_op - custos_fixos):.2f}")
+            
+            if falta_pagar > 0:
+                lanches_faltantes = int(falta_pagar / ticket_medio_lucro) if ticket_medio_lucro > 0 else 0
+                m3.metric("Falta p/ Pagar Contas", f"R$ {falta_pagar:.2f}", delta=f"{lanches_faltantes} lanches", delta_color="inverse")
+                st.warning(f"💡 Você ainda precisa lucrar **R$ {falta_pagar:.2f}** para cobrir seus custos fixos de R$ {custos_fixos:.2f}. Isso equivale a aproximadamente **{lanches_faltantes} pedidos**.")
+            else:
+                m3.metric("Lucro Real Livre", f"R$ {abs(falta_pagar):.2f}", delta="Contas Pagas!", delta_color="normal")
+                st.success(f"🚀 Parabéns! Você já cobriu os custos fixos e está no **Lucro Real de R$ {abs(falta_pagar):.2f}**.")
 
             st.divider()
 
-            # --- GRÁFICO: EVOLUÇÃO ACUMULADA VS META ---
-            st.subheader("🎯 Evolução Acumulada vs Meta")
+            # --- BARRA DE PROGRESSO AZUL (Restaurada) ---
+            st.write(f"**Progresso da Meta Mensal (R$ {meta_mensal:.2f}):**")
+            progresso = min(faturamento_total / meta_mensal, 1.0) if meta_mensal > 0 else 1.0
+            st.progress(progresso)
+
+            # --- GRÁFICOS ---
+            st.subheader("📈 Evolução Acumulada vs Meta")
             df_f['Acumulado'] = df_f['Valor_Bruto'].cumsum()
             
             fig_meta = go.Figure()
             fig_meta.add_trace(go.Scatter(x=df_f['Data_Formatada'], y=df_f['Acumulado'], mode='lines+markers', name='Faturamento Real', line=dict(color='#FF8C00', width=4)))
             fig_meta.add_hline(y=meta_mensal, line_dash="dash", line_color="red", annotation_text=f"Meta: R$ {meta_mensal}")
-            
             fig_meta.update_layout(xaxis_title="Dias", yaxis_title="R$ Acumulado", height=400)
             st.plotly_chart(fig_meta, use_container_width=True)
 
             col_g1, col_g2 = st.columns(2)
             with col_g1:
                 rank = df_f.groupby('Produto').size().reset_index(name='Qtd').sort_values('Qtd', ascending=True)
-                st.plotly_chart(px.bar(rank, x='Qtd', y='Produto', orientation='h', title="Ranking de Saída", color_discrete_sequence=['#FF8C00']), use_container_width=True)
-            with col_g2:
-                st.plotly_chart(px.pie(df_f, names='Canal', title="iFood vs Whats", hole=0.4, color_discrete_sequence=['#FF8C00', '#32CD32']), use_container_width=True)
-
-    with tab3:
-        st.subheader("Gerenciar Histórico")
-        df_h = load_data()
-        if not df_h.empty:
-            df_h['Deletar'] = False
-            cols = ['Deletar', 'Data', 'Hora', 'Produto', 'Canal', 'Valor_Bruto', 'Lucro_Liquido']
-            edited_df = st.data_editor(df_h[cols].iloc[::-1], hide_index=True, use_container_width=True)
-            
-            if st.button("🗑️ EXCLUIR SELECIONADOS"):
-                indices_manter = edited_df[edited_df['Deletar'] == False].index
-                df_final_del = df_h.loc[indices_manter].drop(columns=['Data_Formatada', 'Deletar'], errors='ignore')
-                conn.update(worksheet="Vendas", data=df_final_del)
-                st.rerun()
+                st.plotly_chart(px.bar(rank, x='Qtd', y='Produto', orientation='h', title
