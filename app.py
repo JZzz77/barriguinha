@@ -5,13 +5,14 @@ from datetime import datetime, timedelta
 import plotly.express as px
 
 # 1. CONFIGURAÇÃO DA PÁGINA
-st.set_page_config(page_title="Barriguinha Control", layout="centered", page_icon="🍔")
+st.set_page_config(page_title="Barriguinha Admin", layout="wide", page_icon="📊")
 
-# Design CSS
+# Design CSS Profissional
 st.markdown("""
     <style>
-    .stButton>button { width: 100%; border-radius: 10px; background-color: #FF8C00; color: white; font-weight: bold; }
-    [data-testid="stMetricValue"] { background-color: #f0f2f6; padding: 15px; border-radius: 10px; color: #FF8C00; }
+    .stButton>button { width: 100%; border-radius: 8px; background-color: #FF8C00; color: white; font-weight: bold; border: none; height: 3.5em; }
+    .stMetric { background-color: #ffffff; padding: 15px; border-radius: 10px; box-shadow: 2px 2px 10px rgba(0,0,0,0.1); }
+    .main { background-color: #f8f9fa; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -21,82 +22,127 @@ def check_password():
         if st.session_state["password"] == "BARRIGA2024":
             st.session_state["password_correct"] = True
             del st.session_state["password"]
-        else:
-            st.session_state["password_correct"] = False
+        else: st.session_state["password_correct"] = False
 
     if "password_correct" not in st.session_state:
-        st.title("🔒 Acesso Restrito")
-        st.text_input("Senha:", type="password", on_change=password_entered, key="password")
+        st.title("🔐 Barriguinha Admin Login")
+        st.text_input("Senha de Acesso:", type="password", on_change=password_entered, key="password")
         return False
-    elif not st.session_state["password_correct"]:
-        st.text_input("Senha incorreta. Tente novamente:", type="password", on_change=password_entered, key="password")
-        return False
-    return True
+    return st.session_state["password_correct"]
 
 if check_password():
-    st.title("🍔 Barriguinha Control v1.3")
     conn = st.connection("gsheets", type=GSheetsConnection)
 
     def load_data():
         df = conn.read(worksheet="Vendas", ttl=0)
         if not df.empty:
-            # Converte a coluna Data para o formato datetime do Python para o gráfico entender a ordem
             df['Data_Formatada'] = pd.to_datetime(df['Data'], format='%d/%m/%Y')
         return df
 
-    # SIDEBAR
-    st.sidebar.header("⚙️ Configuração")
+    # --- SIDEBAR: CONFIGURAÇÕES DE NEGÓCIO ---
+    st.sidebar.header("🎯 Metas e Custos")
+    meta_mensal = st.sidebar.number_input("Meta de Faturamento (R$)", value=5000)
+    custos_fixos = st.sidebar.number_input("Custos Fixos Mensais (Luz/MEI/etc)", value=300)
+    
+    st.sidebar.divider()
+    st.sidebar.header("🥩 Insumos Atuais")
     preco_carne = st.sidebar.number_input("Carne KG", value=34.90)
     preco_pao = st.sidebar.number_input("Pão Unid.", value=1.47)
-    cmv_base = (preco_carne * 0.12) + preco_pao + 5.30
+    cmv_base = (preco_carne * 0.12) + preco_pao + 5.30 # 5.30 = queijo/emb/maio
 
-    tab1, tab2, tab3 = st.tabs(["📝 Registrar", "📊 BI & Gráficos", "📜 Histórico"])
+    if st.sidebar.button("Sair"):
+        st.session_state["password_correct"] = False
+        st.rerun()
 
+    # --- TELA PRINCIPAL ---
+    st.title("🍔 Barriguinha Control v1.4")
+    
+    tab1, tab2, tab3, tab4 = st.tabs(["📝 PDV", "📈 Dashboard", "📋 Histórico", "⚙️ Configuração"])
+
+    # --- TAB 1: PONTO DE VENDA (PDV) ---
     with tab1:
-        st.subheader("Novo Pedido")
-        hora_padrao = datetime.now() - timedelta(hours=3)
-        
-        c1, c2 = st.columns(2)
-        with c1: data_venda = st.date_input("Data", hora_padrao.date())
-        with c2: hora_venda = st.time_input("Hora", hora_padrao.time())
-        
-        canal = st.selectbox("Canal", ["WhatsApp", "iFood"])
-        produto = st.selectbox("Produto", ["Smash de Responsa", "Artesanal de Lei", "Supremo Barriguinha", "Bruto de Respeito", "Combo Tanquinho", "Combo Pochete", "Combo Barriguinha", "Combo Barrigona", "Combo Pança"])
-
-        precos = {"iFood": {"Smash de Responsa": 19.9, "Artesanal de Lei": 29.9, "Supremo Barriguinha": 32.9, "Bruto de Respeito": 42.9, "Combo Tanquinho": 39.9, "Combo Pochete": 46.9, "Combo Barriguinha": 49.9, "Combo Barrigona": 59.9, "Combo Pança": 119.9},
-                  "WhatsApp": {"Smash de Responsa": 17.9, "Artesanal de Lei": 26.9, "Supremo Barriguinha": 29.9, "Bruto de Respeito": 38.9, "Combo Tanquinho": 32.9, "Combo Pochete": 39.9, "Combo Barriguinha": 44.9, "Combo Barrigona": 52.9, "Combo Pança": 99.9}}
-
-        valor_venda = precos[canal][produto]
-        st.info(f"Valor: R$ {valor_venda:.2f}")
-
-        if st.button("🚀 Registrar"):
-            taxa = 0.26 if canal == "iFood" else 0.0
-            lucro = (valor_venda * (1 - taxa)) - cmv_base
-            novo = pd.DataFrame([{"Data": data_venda.strftime("%d/%m/%Y"), "Hora": hora_venda.strftime("%H:%M"), "Produto": produto, "Canal": canal, "Valor_Bruto": valor_venda, "Lucro_Liquido": round(lucro, 2)}])
-            conn.update(worksheet="Vendas", data=pd.concat([load_data().drop(columns=['Data_Formatada'], errors='ignore'), novo], ignore_index=True))
-            st.success("Registrado!")
-
-    with tab2:
-        st.subheader("Performance")
-        data = load_data()
-        if not data.empty:
-            # GRÁFICO POR DIA (Novo)
-            vendas_dia = data.groupby('Data_Formatada')['Valor_Bruto'].sum().reset_index()
-            fig_dia = px.line(vendas_dia, x='Data_Formatada', y='Valor_Bruto', title="Faturamento Diário (R$)", markers=True)
-            fig_dia.update_traces(line_color='#FF8C00')
-            st.plotly_chart(fig_dia, use_container_width=True)
-
-            # GRÁFICO POR HORA
-            data['Hora_H'] = data['Hora'].str[:2] + "h"
-            fig_hora = px.bar(data.groupby('Hora_H').size().reset_index(name='Pedidos'), x='Hora_H', y='Pedidos', title="Pedidos por Horário", color_discrete_sequence=['#FF8C00'])
-            st.plotly_chart(fig_hora, use_container_width=True)
+        with st.expander("✨ Registrar Novo Pedido", expanded=True):
+            col_data, col_hora = st.columns(2)
+            hora_padrao = datetime.now() - timedelta(hours=3)
+            data_venda = col_data.date_input("Data", hora_padrao.date())
+            hora_venda = col_hora.time_input("Hora", hora_padrao.time())
             
-            st.metric("Lucro Líquido Total", f"R$ {data['Lucro_Liquido'].sum():.2f}")
-        else:
-            st.warning("Sem dados.")
+            canal = st.radio("Canal de Venda", ["WhatsApp", "iFood"], horizontal=True)
+            produto = st.selectbox("Lanche/Combo", ["Smash de Responsa", "Artesanal de Lei", "Supremo Barriguinha", "Bruto de Respeito", "Combo Tanquinho", "Combo Pochete", "Combo Barriguinha", "Combo Barrigona", "Combo Pança"])
 
+            precos = {"iFood": {"Smash de Responsa": 19.9, "Artesanal de Lei": 29.9, "Supremo Barriguinha": 32.9, "Bruto de Respeito": 42.9, "Combo Tanquinho": 39.9, "Combo Pochete": 46.9, "Combo Barriguinha": 49.9, "Combo Barrigona": 59.9, "Combo Pança": 119.9},
+                      "WhatsApp": {"Smash de Responsa": 17.9, "Artesanal de Lei": 26.9, "Supremo Barriguinha": 29.9, "Bruto de Respeito": 38.9, "Combo Tanquinho": 32.9, "Combo Pochete": 39.9, "Combo Barriguinha": 44.9, "Combo Barrigona": 52.9, "Combo Pança": 99.9}}
+            
+            valor_venda = precos[canal][produto]
+            st.metric("Total a Cobrar", f"R$ {valor_venda:.2f}")
+
+            if st.button("🚀 FINALIZAR PEDIDO"):
+                taxa = 0.26 if canal == "iFood" else 0.0
+                lucro = (valor_venda * (1 - taxa)) - cmv_base
+                novo = pd.DataFrame([{"Data": data_venda.strftime("%d/%m/%Y"), "Hora": hora_venda.strftime("%H:%M"), "Produto": produto, "Canal": canal, "Valor_Bruto": valor_venda, "Lucro_Liquido": round(lucro, 2)}])
+                conn.update(worksheet="Vendas", data=pd.concat([load_data().drop(columns=['Data_Formatada'], errors='ignore'), novo], ignore_index=True))
+                st.success("Pedido Salvo com Sucesso!")
+                st.balloons()
+
+    # --- TAB 2: DASHBOARD ADMINISTRATIVO ---
+    with tab2:
+        df = load_data()
+        if not df.empty:
+            # Filtros de Tempo
+            col_f1, col_f2 = st.columns(2)
+            data_inicio = col_f1.date_input("Início", df['Data_Formatada'].min())
+            data_fim = col_f2.date_input("Fim", df['Data_Formatada'].max())
+            mask = (df['Data_Formatada'].dt.date >= data_inicio) & (df['Data_Formatada'].dt.date <= data_fim)
+            df_filtered = df.loc[mask]
+
+            # MÉTRICAS PRINCIPAIS
+            m1, m2, m3, m4 = st.columns(4)
+            faturamento = df_filtered['Valor_Bruto'].sum()
+            lucro_op = df_filtered['Lucro_Liquido'].sum()
+            ticket_medio = faturamento / len(df_filtered) if len(df_filtered) > 0 else 0
+            
+            m1.metric("Faturamento Bruto", f"R$ {faturamento:.2f}")
+            m2.metric("Lucro Operacional", f"R$ {lucro_op:.2f}")
+            m3.metric("Ticket Médio", f"R$ {ticket_medio:.2f}")
+            m4.metric("Pedidos", len(df_filtered))
+
+            # PROGRESSO DA META
+            progresso = min(faturamento / meta_mensal, 1.0)
+            st.write(f"**Progresso da Meta Mensal (R$ {meta_mensal}):**")
+            st.progress(progresso)
+
+            col_graf1, col_graf2 = st.columns(2)
+            
+            with col_graf1:
+                # Faturamento por Dia
+                vendas_dia = df_filtered.groupby('Data_Formatada')['Valor_Bruto'].sum().reset_index()
+                fig_dia = px.line(vendas_dia, x='Data_Formatada', y='Valor_Bruto', title="Evolução Diária", markers=True, color_discrete_sequence=['#FF8C00'])
+                st.plotly_chart(fig_dia, use_container_width=True)
+
+            with col_graf2:
+                # Produtos mais vendidos
+                prod_rank = df_filtered.groupby('Produto').size().reset_index(name='Qtd').sort_values('Qtd', ascending=True)
+                fig_prod = px.bar(prod_rank, x='Qtd', y='Produto', orientation='h', title="Ranking de Produtos", color_discrete_sequence=['#FF8C00'])
+                st.plotly_chart(fig_prod, use_container_width=True)
+
+            # Cálculo de Lucro Real (Descontando Fixo Proporcional)
+            lucro_real = lucro_op - custos_fixos
+            st.warning(f"💰 **Lucro Real Estimado (Lucro Op. - Custos Fixos): R$ {lucro_real:.2f}**")
+        else:
+            st.info("Aguardando primeiros dados para gerar inteligência...")
+
+    # --- TAB 3: HISTÓRICO ---
     with tab3:
-        st.subheader("Histórico")
-        history = load_data()
-        if not history.empty:
-            st.dataframe(history.drop(columns=['Data_Formatada']).iloc[::-1], use_container_width=True)
+        st.subheader("Livro de Registro")
+        df_hist = load_data()
+        if not df_hist.empty:
+            st.dataframe(df_hist.drop(columns=['Data_Formatada']).iloc[::-1], use_container_width=True)
+            if st.button("🗑️ Excluir Último Pedido (CUIDADO)"):
+                df_hist = df_hist.drop(df_hist.index[-1])
+                conn.update(worksheet="Vendas", data=df_hist.drop(columns=['Data_Formatada'], errors='ignore'))
+                st.warning("Último pedido removido. Atualize a página.")
+    
+    # --- TAB 4: CONFIGURAÇÕES ---
+    with tab4:
+        st.write("Versão 1.4 - Desenvolvido para Barriguinha Burguer")
+        st.write("Dica: Use a aba 'Dashboard' para ver o Ticket Médio. Se estiver abaixo de R$ 35,00, tente oferecer combos!")
