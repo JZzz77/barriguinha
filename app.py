@@ -66,21 +66,7 @@ if check_password():
             hora_padrao = datetime.now() - timedelta(hours=3)
             data_venda = col_data.date_input("Data", hora_padrao.date())
             hora_venda = col_hora.time_input("Hora", hora_padrao.time())
-            if 'data_memoria' not in st.session_state:
-                st.session_state.data_memoria = hora_padrao.date()
-            if 'hora_memoria' not in st.session_state:
-                st.session_state.hora_memoria = hora_padrao.time()
-
-            col_data, col_hora = st.columns(2)
-                with col_data:
-                    data_venda = st.date_input("Data da Venda", value=st.session_state.data_memoria, key="data_input")
-                    # Atualiza a memória quando você muda a data
-                        st.session_state.data_memoria = data_venda
-        
-                with col_hora:
-                    hora_venda = st.time_input("Hora da Venda", value=st.session_state.hora_memoria, key="hora_input")
-                    # Atualiza a memória quando você muda a hora
-                    st.session_state.hora_memoria = hora_venda
+           
             canal = st.radio("Canal de Venda", ["WhatsApp", "iFood"], horizontal=True)
             produto = st.selectbox("Lanche/Combo", ["Smash de Responsa", "Artesanal de Lei", "Supremo Barriguinha", "Bruto de Respeito", "Combo Tanquinho", "Combo Pochete", "Combo Barriguinha", "Combo Barrigona", "Combo Pança"])
 
