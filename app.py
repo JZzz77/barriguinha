@@ -48,7 +48,26 @@ with tab1:
             "Bruto de Respeito", "Combo Tanquinho", "Combo Pochete", 
             "Combo Barriguinha", "Combo Barrigona", "Combo Pança"
         ])
+# --- AJUSTE DE MEMÓRIA PARA DATA E HORA ---
+    # Define o horário padrão de Brasília apenas se a "memória" estiver vazia
+    hora_padrao = datetime.now() - timedelta(hours=3)
 
+    if 'data_memoria' not in st.session_state:
+        st.session_state.data_memoria = hora_padrao.date()
+    if 'hora_memoria' not in st.session_state:
+        st.session_state.hora_memoria = hora_padrao.time()
+
+    col_data, col_hora = st.columns(2)
+    with col_data:
+        data_venda = st.date_input("Data da Venda", value=st.session_state.data_memoria, key="data_input")
+        # Atualiza a memória quando você muda a data
+        st.session_state.data_memoria = data_venda
+        
+    with col_hora:
+        hora_venda = st.time_input("Hora da Venda", value=st.session_state.hora_memoria, key="hora_input")
+        # Atualiza a memória quando você muda a hora
+        st.session_state.hora_memoria = hora_venda
+    # ------------------------------------------
     precos_ifood = {
         "Smash de Responsa": 19.90, "Artesanal de Lei": 29.90, "Supremo Barriguinha": 32.90,
         "Bruto de Respeito": 42.90, "Combo Tanquinho": 39.90, "Combo Pochete": 46.90,
