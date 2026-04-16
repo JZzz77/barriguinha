@@ -6,18 +6,19 @@ import plotly.express as px
 import plotly.graph_objects as go
 
 # 1. CONFIGURAÇÃO DA PÁGINA
-st.set_page_config(page_title="Barriguinha Admin v1.9", layout="wide", page_icon="🍔")
+st.set_page_config(page_title="Barriguinha Admin v2.0", layout="wide", page_icon="🍔")
 
-# Design CSS
+# Design CSS (Mantendo tudo bonito)
 st.markdown("""
     <style>
     .stButton>button { width: 100%; border-radius: 8px; background-color: #FF8C00; color: white !important; font-weight: bold; height: 3.5em; border: none; }
     [data-testid="stMetricValue"] { color: #FF8C00 !important; font-weight: bold; }
     div[data-testid="stMetric"] { background-color: rgba(128, 128, 128, 0.1); padding: 15px; border-radius: 10px; border-left: 5px solid #FF8C00; }
+    div[data-testid="stExpander"] { border: none; box-shadow: 2px 2px 10px rgba(0,0,0,0.1); margin-bottom: 10px; }
     </style>
     """, unsafe_allow_html=True)
 
-# 2. SISTEMA DE LOGIN (Com aviso de erro restaurado)
+# 2. SISTEMA DE LOGIN
 def check_password():
     def password_entered():
         if st.session_state["password_input"] == "BARRIGA2024":
@@ -28,7 +29,6 @@ def check_password():
     if "password_correct" not in st.session_state or not st.session_state["password_correct"]:
         st.title("🔐 Acesso Administrativo")
         st.text_input("Senha:", type="password", on_change=password_entered, key="password_input")
-        # Mensagem de erro caso a senha esteja errada
         if "password_correct" in st.session_state and not st.session_state["password_correct"]:
             st.error("❌ Senha Incorreta! Tente novamente.")
         return False
@@ -46,13 +46,25 @@ if check_password():
         except:
             return pd.DataFrame()
 
-    # --- SIDEBAR: PARÂMETROS E INSUMOS (Detalhado) ---
+    # --- BANCO DE DADOS DINÂMICO DO CARDÁPIO (Memória da Sessão) ---
+    if "menu_df" not in st.session_state:
+        dados_iniciais = [
+            {"Produto": "Smash de Responsa", "Preço Whats": 17.9, "Preço iFood": 19.9, "Carne (g)": 90, "Queijo": True, "Bacon": False, "Salada": False, "Cebola": False, "Combo": False},
+            {"Produto": "Artesanal de Lei", "Preço Whats": 26.9, "Preço iFood": 29.9, "Carne (g)": 120, "Queijo": True, "Bacon": False, "Salada": True, "Cebola": False, "Combo": False},
+            {"Produto": "Supremo Barriguinha", "Preço Whats": 29.9, "Preço iFood": 32.9, "Carne (g)": 120, "Queijo": True, "Bacon": True, "Salada": True, "Cebola": True, "Combo": False},
+            {"Produto": "Bruto de Respeito", "Preço Whats": 38.9, "Preço iFood": 42.9, "Carne (g)": 240, "Queijo": True, "Bacon": True, "Salada": True, "Cebola": True, "Combo": False},
+            {"Produto": "Combo Tanquinho", "Preço Whats": 32.9, "Preço iFood": 39.9, "Carne (g)": 90, "Queijo": True, "Bacon": False, "Salada": False, "Cebola": False, "Combo": True},
+            {"Produto": "Combo Barrigona", "Preço Whats": 52.9, "Preço iFood": 59.9, "Carne (g)": 240, "Queijo": True, "Bacon": True, "Salada": True, "Cebola": True, "Combo": True}
+        ]
+        st.session_state["menu_df"] = pd.DataFrame(dados_iniciais)
+
+    # --- SIDEBAR: PARÂMETROS E INSUMOS ---
     st.sidebar.header("🎯 Metas e Custos Fixos")
     meta_mensal = st.sidebar.number_input("Meta de Faturamento (R$)", value=5000.0)
     custos_fixos = st.sidebar.number_input("Custos Fixos (Luz/MEI/etc)", value=300.0)
     
     st.sidebar.divider()
-    st.sidebar.header("🛒 Preço dos Insumos")
+    st.sidebar.header("🛒 Preço dos Insumos (Variáveis)")
     p_carne = st.sidebar.number_input("Carne KG (Ref: R$ 34.90)", value=34.90)
     p_pao = st.sidebar.number_input("Pão Unit. (Ref: R$ 1.47)", value=1.47)
     p_queijo = st.sidebar.number_input("Queijo (2 fat. - Ref: R$ 2.10)", value=2.10)
@@ -61,47 +73,73 @@ if check_password():
     p_cebola = st.sidebar.number_input("Cebola (Ref: R$ 0.20)", value=0.20)
     p_fixo = st.sidebar.number_input("Embalagem/Molho", value=2.50)
 
-    def calcular_custo_lanche(nome_lanche):
+    # --- NOVO CÁLCULO DINÂMICO ---
+    def calcular_custo_dinamico(nome_produto):
+        # Procura a receita do lanche na tabela do cardápio
+        menu = st.session_state["menu_df"]
+        produto_info = menu[menu["Produto"] == nome_produto]
+        
+        if produto_info.empty:
+            return 0
+            
+        prod = produto_info.iloc[0]
         custo = p_pao + p_fixo
-        if "Smash" in nome_lanche: custo += (p_carne * 0.09) + p_queijo
-        elif "Artesanal" in nome_lanche: custo += (p_carne * 0.12) + p_queijo + p_salada
-        elif any(x in nome_lanche for x in ["Supremo", "Bruto", "Combo"]):
-            custo += (p_carne * 0.12) + p_queijo + p_bacon + p_salada + p_cebola
-        if "Combo" in nome_lanche: custo += 4.50 
+        custo += (p_carne * (prod["Carne (g)"] / 1000.0)) # Transforma gramas em KG pra calcular
+        
+        if prod["Queijo"]: custo += p_queijo
+        if prod["Bacon"]: custo += p_bacon
+        if prod["Salada"]: custo += p_salada
+        if prod["Cebola"]: custo += p_cebola
+        if prod["Combo"]: custo += 4.50 # Custo fixo de batata/refri do combo
+        
         return custo
 
     # --- ABAS ---
-    tab1, tab2, tab3 = st.tabs(["📝 PDV", "📈 Dashboard", "📜 Histórico"])
+    tab1, tab2, tab3 = st.tabs(["📝 PDV & Cardápio", "📈 Dashboard", "📜 Histórico"])
 
     with tab1:
-        st.subheader("Novo Pedido")
-        hora_padrao = datetime.now() - timedelta(hours=3)
-        if "d_v" not in st.session_state: st.session_state["d_v"] = hora_padrao.date()
-        if "h_v" not in st.session_state: st.session_state["h_v"] = hora_padrao.time()
+        # EXPANDER 1: O PDV DE VENDAS
+        with st.expander("✨ Registrar Novo Pedido", expanded=True):
+            hora_padrao = datetime.now() - timedelta(hours=3)
+            if "d_v" not in st.session_state: st.session_state["d_v"] = hora_padrao.date()
+            if "h_v" not in st.session_state: st.session_state["h_v"] = hora_padrao.time()
 
-        c1, c2 = st.columns(2)
-        data_sel = c1.date_input("Data", key="d_v")
-        hora_sel = c2.time_input("Hora", key="h_v")
-        
-        canal = st.radio("Canal", ["WhatsApp", "iFood"], horizontal=True)
-        produto = st.selectbox("Lanche", ["Smash de Responsa", "Artesanal de Lei", "Supremo Barriguinha", "Bruto de Respeito", "Combo Tanquinho", "Combo Pochete", "Combo Barriguinha", "Combo Barrigona", "Combo Pança"])
+            c1, c2 = st.columns(2)
+            data_sel = c1.date_input("Data", key="d_v")
+            hora_sel = c2.time_input("Hora", key="h_v")
+            
+            canal = st.radio("Canal", ["WhatsApp", "iFood"], horizontal=True)
+            
+            # Puxa os nomes dos lanches direto da sua tabela editável!
+            lista_produtos = st.session_state["menu_df"]["Produto"].tolist()
+            produto = st.selectbox("Lanche", lista_produtos)
 
-        precos = {
-            "iFood": {"Smash de Responsa": 19.9, "Artesanal de Lei": 29.9, "Supremo Barriguinha": 32.9, "Bruto de Respeito": 42.9, "Combo Tanquinho": 39.9, "Combo Pochete": 46.9, "Combo Barriguinha": 49.9, "Combo Barrigona": 59.9, "Combo Pança": 119.9},
-            "WhatsApp": {"Smash de Responsa": 17.9, "Artesanal de Lei": 26.9, "Supremo Barriguinha": 29.9, "Bruto de Respeito": 38.9, "Combo Tanquinho": 32.9, "Combo Pochete": 39.9, "Combo Barriguinha": 44.9, "Combo Barrigona": 52.9, "Combo Pança": 99.9}
-        }
-        
-        v_venda = precos[canal][produto]
-        st.metric("Valor a Cobrar", f"R$ {v_venda:.2f}")
+            # Busca o preço certo baseado no canal e no produto escolhido
+            prod_selecionado = st.session_state["menu_df"][st.session_state["menu_df"]["Produto"] == produto].iloc[0]
+            v_venda = prod_selecionado["Preço iFood"] if canal == "iFood" else prod_selecionado["Preço Whats"]
+            
+            st.metric("Valor a Cobrar", f"R$ {v_venda:.2f}")
 
-        if st.button("🚀 REGISTRAR VENDA"):
-            taxa = 0.26 if canal == "iFood" else 0.0
-            custo_total = calcular_custo_lanche(produto)
-            lucro = (v_venda * (1 - taxa)) - custo_total
-            novo = pd.DataFrame([{"Data": data_sel.strftime("%d/%m/%Y"), "Hora": hora_sel.strftime("%H:%M"), "Produto": produto, "Canal": canal, "Valor_Bruto": v_venda, "Lucro_Liquido": round(lucro, 2)}])
-            conn.update(worksheet="Vendas", data=pd.concat([load_data().drop(columns=['Data_Formatada'], errors='ignore'), novo], ignore_index=True))
-            st.success("Venda salva!")
-            st.balloons()
+            if st.button("🚀 REGISTRAR VENDA"):
+                taxa = 0.26 if canal == "iFood" else 0.0
+                custo_total = calcular_custo_dinamico(produto) # Chama a matemática avançada
+                lucro = (v_venda * (1 - taxa)) - custo_total
+                
+                novo = pd.DataFrame([{"Data": data_sel.strftime("%d/%m/%Y"), "Hora": hora_sel.strftime("%H:%M"), "Produto": produto, "Canal": canal, "Valor_Bruto": v_venda, "Lucro_Liquido": round(lucro, 2)}])
+                conn.update(worksheet="Vendas", data=pd.concat([load_data().drop(columns=['Data_Formatada'], errors='ignore'), novo], ignore_index=True))
+                st.success(f"Venda salva! Custo calculado: R$ {custo_total:.2f} | Lucro: R$ {lucro:.2f}")
+                st.balloons()
+
+        # EXPANDER 2: EDITOR DE CARDÁPIO
+        with st.expander("🍔 Editor de Cardápio e Receitas (Adicione Lanches Aqui)", expanded=False):
+            st.write("Crie novos lanches ou altere os ingredientes. O PDV e o cálculo de lucro atualizarão na hora!")
+            
+            # Cria a tabela interativa (num_rows="dynamic" permite você adicionar linhas)
+            menu_editado = st.data_editor(st.session_state["menu_df"], num_rows="dynamic", use_container_width=True)
+            
+            # Salva as edições na memória do app
+            st.session_state["menu_df"] = menu_editado
+            st.info("⚠️ Nota: Por enquanto, edições no cardápio duram até o app ser reiniciado. Adicionaremos salvamento definitivo em breve.")
 
     with tab2:
         df = load_data()
@@ -114,11 +152,9 @@ if check_password():
             d_fim = c_f2.date_input("Fim", hoje)
             df_f = df[(df['Data_Formatada'].dt.date >= d_ini) & (df['Data_Formatada'].dt.date <= d_fim)].sort_values('Data_Formatada')
 
-            # --- MÉTRICAS E LÓGICA DO PAGA-CONTAS (Restaurado) ---
             m1, m2, m3 = st.columns(3)
             faturamento_total = df_f['Valor_Bruto'].sum()
             lucro_op = df_f['Lucro_Liquido'].sum()
-            
             ticket_medio_lucro = lucro_op / len(df_f) if len(df_f) > 0 else 0
             falta_pagar = custos_fixos - lucro_op
 
@@ -128,19 +164,17 @@ if check_password():
             if falta_pagar > 0:
                 lanches_faltantes = int(falta_pagar / ticket_medio_lucro) if ticket_medio_lucro > 0 else 0
                 m3.metric("Falta p/ Pagar Contas", f"R$ {falta_pagar:.2f}", delta=f"{lanches_faltantes} lanches", delta_color="inverse")
-                st.warning(f"💡 Você ainda precisa lucrar **R$ {falta_pagar:.2f}** para cobrir seus custos fixos de R$ {custos_fixos:.2f}. Isso equivale a aproximadamente **{lanches_faltantes} pedidos**.")
+                st.warning(f"💡 Você ainda precisa lucrar **R$ {falta_pagar:.2f}** para cobrir seus custos fixos de R$ {custos_fixos:.2f}.")
             else:
                 m3.metric("Lucro Real Livre", f"R$ {abs(falta_pagar):.2f}", delta="Contas Pagas!", delta_color="normal")
                 st.success(f"🚀 Parabéns! Você já cobriu os custos fixos e está no **Lucro Real de R$ {abs(falta_pagar):.2f}**.")
 
             st.divider()
 
-            # --- BARRA DE PROGRESSO AZUL (Restaurada) ---
             st.write(f"**Progresso da Meta Mensal (R$ {meta_mensal:.2f}):**")
             progresso = min(faturamento_total / meta_mensal, 1.0) if meta_mensal > 0 else 1.0
             st.progress(progresso)
 
-            # --- GRÁFICOS ---
             st.subheader("📈 Evolução Acumulada vs Meta")
             df_f['Acumulado'] = df_f['Valor_Bruto'].cumsum()
             
