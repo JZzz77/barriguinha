@@ -31,13 +31,7 @@ with tab1:
     st.subheader("Novo Pedido")
     
     # Ajuste de Horário para Brasília (UTC-3)
-    hora_atual_br = datetime.now() - timedelta(hours=3)
-    
-    col_data, col_hora = st.columns(2)
-    with col_data:
-        data_venda = st.date_input("Data da Venda", hora_atual_br.date())
-    with col_hora:
-        hora_venda = st.time_input("Hora da Venda", hora_atual_br.time())
+
     
     col1, col2 = st.columns(2)
     with col1:
