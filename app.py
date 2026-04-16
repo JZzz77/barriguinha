@@ -7,12 +7,43 @@ import plotly.express as px
 # 1. CONFIGURAÇÃO DA PÁGINA
 st.set_page_config(page_title="Barriguinha Admin v1.5", layout="wide", page_icon="📊")
 
-# Design CSS Reforçado para Mobile
+# Design CSS Reforçado e Adaptável (v1.5.1)
 st.markdown("""
     <style>
-    .stButton>button { width: 100%; border-radius: 8px; background-color: #FF8C00; color: white; font-weight: bold; height: 3.5em; border: none; }
-    .stMetric { background-color: #ffffff; padding: 10px; border-radius: 10px; box-shadow: 2px 2px 8px rgba(0,0,0,0.05); border-left: 5px solid #FF8C00; }
-    div[data-testid="stExpander"] { border: none; box-shadow: 2px 2px 10px rgba(0,0,0,0.05); }
+    /* Botão Principal */
+    .stButton>button { 
+        width: 100%; 
+        border-radius: 8px; 
+        background-color: #FF8C00; 
+        color: white !important; 
+        font-weight: bold; 
+        height: 3.5em; 
+        border: none; 
+    }
+    
+    /* Ajuste das Métricas para Modo Escuro/Claro */
+    [data-testid="stMetricValue"] { 
+        color: #FF8C00 !important; 
+        font-weight: bold;
+    }
+    
+    [data-testid="stMetricLabel"] {
+        color: gray !important;
+    }
+
+    /* Container das métricas */
+    div[data-testid="stMetric"] {
+        background-color: rgba(128, 128, 128, 0.1); /* Fundo sutil que funciona em ambos os modos */
+        padding: 15px;
+        border-radius: 10px;
+        border-left: 5px solid #FF8C00;
+    }
+
+    /* Estilo do Expander */
+    div[data-testid="stExpander"] { 
+        border: none; 
+        box-shadow: 2px 2px 10px rgba(0,0,0,0.2); 
+    }
     </style>
     """, unsafe_allow_html=True)
 
