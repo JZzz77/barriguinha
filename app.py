@@ -153,4 +153,21 @@ if check_password():
             col_g1, col_g2 = st.columns(2)
             with col_g1:
                 rank = df_f.groupby('Produto').size().reset_index(name='Qtd').sort_values('Qtd', ascending=True)
-                st.plotly_chart(px.bar(rank, x='Qtd', y='Produto', orientation='h', title
+                st.plotly_chart(px.bar(rank, x='Qtd', y='Produto', orientation='h', title="Ranking de Saída", color_discrete_sequence=['#FF8C00']), use_container_width=True)
+            with col_g2:
+                st.plotly_chart(px.pie(df_f, names='Canal', title="iFood vs Whats", hole=0.4, color_discrete_sequence=['#FF8C00', '#32CD32']), use_container_width=True)
+
+    with tab3:
+        st.subheader("Gerenciar Histórico")
+        df_h = load_data()
+        if not df_h.empty:
+            df_h['Deletar'] = False
+            cols = ['Deletar', 'Data', 'Hora', 'Produto', 'Canal', 'Valor_Bruto', 'Lucro_Liquido']
+            edited_df = st.data_editor(df_h[cols].iloc[::-1], hide_index=True, use_container_width=True)
+            
+            if st.button("🗑️ EXCLUIR SELECIONADOS"):
+                indices_manter = edited_df[edited_df['Deletar'] == False].index
+                df_final_del = df_h.loc[indices_manter].drop(columns=['Data_Formatada', 'Deletar'], errors='ignore')
+                conn.update(worksheet="Vendas", data=df_final_del)
+                st.success("Pedidos apagados!")
+                st.rerun()
