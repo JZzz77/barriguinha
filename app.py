@@ -6,15 +6,15 @@ import plotly.express as px
 import plotly.graph_objects as go
 
 # 1. CONFIGURAÇÃO DA PÁGINA
-st.set_page_config(page_title="Barriguinha Admin v2.5", layout="wide", page_icon="🍔")
+st.set_page_config(page_title="Barriguinha Admin v2.6", layout="wide", page_icon="🍔")
 
-# Design CSS (Estabilidade e Contraste)
 st.markdown("""
     <style>
     .stButton>button { width: 100%; border-radius: 8px; background-color: #FF8C00; color: white !important; font-weight: bold; height: 3.5em; border: none; }
     [data-testid="stMetricValue"] { color: #FF8C00 !important; font-weight: bold; }
     div[data-testid="stMetric"] { background-color: rgba(128, 128, 128, 0.1); padding: 15px; border-radius: 10px; border-left: 5px solid #FF8C00; }
     div[data-testid="stExpander"] { border: none; box-shadow: 2px 2px 10px rgba(0,0,0,0.1); margin-bottom: 10px; }
+    .carrinho-box { background-color: #f8f9fa; padding: 10px; border-radius: 8px; border-left: 4px solid #32CD32; margin-bottom: 10px; color: #333; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -40,13 +40,19 @@ if check_password():
             df = conn.read(worksheet="Vendas", ttl=0)
             if not df.empty:
                 df['Data_Formatada'] = pd.to_datetime(df['Data'], format='%d/%m/%Y')
-                # Força o telefone a ser string limpa para evitar o .0
                 if 'Telefone_Cliente' in df.columns:
                     df['Telefone_Cliente'] = df['Telefone_Cliente'].astype(str).str.replace('.0', '', regex=False)
             return df
-        except: return pd.DataFrame()
+        except Exception as e:
+            # AVISO DE ERRO DE COTA DO GOOGLE ADICIONADO AQUI
+            st.error("⚠️ Aviso: O Google Sheets limitou o acesso por excesso de atualizações rápidas. Aguarde 1 a 2 minutos e recarregue a página.")
+            return pd.DataFrame()
 
-    # --- BANCO DE DADOS DO CARDÁPIO ---
+    # --- INICIALIZAÇÃO DO CARRINHO DE COMPRAS ---
+    if "carrinho" not in st.session_state:
+        st.session_state["carrinho"] = []
+
+    # --- BANCO DE DADOS DO CARDÁPIO COMPLETADO ---
     if "menu_df" not in st.session_state:
         dados_iniciais = [
             {"Produto": "Smash de Responsa", "Preço Whats": 17.9, "Preço iFood": 19.9, "Carne (g)": 80, "Queijo": True, "Bacon": False, "Salada": False, "Cebola": False, "Combo": False, "Refri": False, "Batata": False},
@@ -55,6 +61,9 @@ if check_password():
             {"Produto": "Supremo Barriguinha", "Preço Whats": 29.9, "Preço iFood": 32.9, "Carne (g)": 120, "Queijo": True, "Bacon": True, "Salada": True, "Cebola": True, "Combo": False, "Refri": False, "Batata": False},
             {"Produto": "Bruto de Respeito", "Preço Whats": 34.9, "Preço iFood": 39.9, "Carne (g)": 240, "Queijo": True, "Bacon": True, "Salada": True, "Cebola": True, "Combo": False, "Refri": False, "Batata": False},
             {"Produto": "Combo Tanquinho (Smash)", "Preço Whats": 27.9, "Preço iFood": 32.9, "Carne (g)": 80, "Queijo": True, "Bacon": False, "Salada": False, "Cebola": False, "Combo": True, "Refri": False, "Batata": False},
+            {"Produto": "Combo Pochete (Artesanal)", "Preço Whats": 36.9, "Preço iFood": 42.9, "Carne (g)": 120, "Queijo": True, "Bacon": False, "Salada": True, "Cebola": False, "Combo": True, "Refri": False, "Batata": False},
+            {"Produto": "Combo Barriguinha (Supremo)", "Preço Whats": 39.9, "Preço iFood": 46.9, "Carne (g)": 120, "Queijo": True, "Bacon": True, "Salada": True, "Cebola": True, "Combo": True, "Refri": False, "Batata": False},
+            {"Produto": "Combo Barrigona (Bruto)", "Preço Whats": 44.9, "Preço iFood": 52.9, "Carne (g)": 240, "Queijo": True, "Bacon": True, "Salada": True, "Cebola": True, "Combo": True, "Refri": False, "Batata": False},
             {"Produto": "Refri Lata", "Preço Whats": 5.0, "Preço iFood": 7.0, "Carne (g)": 0, "Queijo": False, "Bacon": False, "Salada": False, "Cebola": False, "Combo": False, "Refri": True, "Batata": False},
             {"Produto": "Batata Frita (100g)", "Preço Whats": 8.0, "Preço iFood": 10.0, "Carne (g)": 0, "Queijo": False, "Bacon": False, "Salada": False, "Cebola": False, "Combo": False, "Refri": False, "Batata": True}
         ]
@@ -103,38 +112,71 @@ if check_password():
             if "d_v" not in st.session_state: st.session_state["d_v"] = hora_padrao.date()
             if "h_v" not in st.session_state: st.session_state["h_v"] = hora_padrao.time()
 
-            c1, c2 = st.columns(2)
-            data_sel = c1.date_input("Data do Pedido", key="d_v")
-            hora_sel = c2.time_input("Hora do Pedido", key="h_v")
+            c_data, c_hora = st.columns(2)
+            data_sel = c_data.date_input("Data do Pedido", key="d_v")
+            hora_sel = c_hora.time_input("Hora do Pedido", key="h_v")
             
             canal = st.radio("Canal de Venda", ["WhatsApp", "iFood"], horizontal=True)
             
-            # Lógica Automática iFood
             if canal == "iFood":
                 tel_cliente = st.text_input("WhatsApp do Cliente:", value="99999999999", disabled=True)
             else:
-                tel_cliente = st.text_input("WhatsApp do Cliente (DDD + Número):", max_chars=11, help="Apenas números, max 11 dígitos.")
+                tel_cliente = st.text_input("WhatsApp do Cliente (DDD + Número):", max_chars=11)
             
+            st.divider()
+            st.write("🛒 **Adicionar Itens ao Carrinho**")
             lista_produtos = st.session_state["menu_df"]["Produto"].tolist()
-            selecionados = st.multiselect("Itens do Pedido:", lista_produtos)
+            
+            col_prod, col_qtd, col_btn = st.columns([3, 1, 1])
+            produto_selecionado = col_prod.selectbox("Lanche/Bebida:", lista_produtos)
+            qtd_selecionada = col_qtd.number_input("Qtd:", min_value=1, value=1)
+            
+            # Adiciona ao Carrinho
+            if col_btn.button("➕ Adicionar"):
+                st.session_state["carrinho"].append({"Produto": produto_selecionado, "Qtd": qtd_selecionada})
+                st.rerun()
 
-            if selecionados and tel_cliente:
-                v_total = 0
-                c_total = 0
-                for p in selecionados:
-                    p_info = st.session_state["menu_df"][st.session_state["menu_df"]["Produto"] == p].iloc[0]
-                    v_total += p_info["Preço iFood"] if canal == "iFood" else p_info["Preço Whats"]
-                    c_total += calcular_custo_dinamico(p)
+            # Renderiza o Carrinho
+            if st.session_state["carrinho"]:
+                st.markdown('<div class="carrinho-box">', unsafe_allow_html=True)
+                v_total_pedido = 0
+                c_total_pedido = 0
+                nomes_pedido = []
                 
-                st.metric("Total a Cobrar", f"R$ {v_total:.2f}")
-                if st.button("🚀 FINALIZAR E SALVAR"):
-                    taxa = 0.26 if canal == "iFood" else 0.0
-                    lucro = (v_total * (1 - taxa)) - c_total
-                    novo = pd.DataFrame([{"Data": data_sel.strftime("%d/%m/%Y"), "Hora": hora_sel.strftime("%H:%M"), "Telefone_Cliente": str(tel_cliente), "Produto": " + ".join(selecionados), "Canal": canal, "Valor_Bruto": v_total, "Lucro_Liquido": round(lucro, 2)}])
-                    conn.update(worksheet="Vendas", data=pd.concat([load_data().drop(columns=['Data_Formatada'], errors='ignore'), novo], ignore_index=True))
-                    st.success("Venda registrada com sucesso!")
-                    st.balloons()
-            else: st.warning("Informe o telefone e os itens.")
+                for item in st.session_state["carrinho"]:
+                    p_info = st.session_state["menu_df"][st.session_state["menu_df"]["Produto"] == item["Produto"]].iloc[0]
+                    v_unitario = p_info["Preço iFood"] if canal == "iFood" else p_info["Preço Whats"]
+                    c_unitario = calcular_custo_dinamico(item["Produto"])
+                    
+                    v_total_pedido += v_unitario * item["Qtd"]
+                    c_total_pedido += c_unitario * item["Qtd"]
+                    nomes_pedido.append(f"{item['Qtd']}x {item['Produto']}")
+                    
+                    st.write(f"🍔 {item['Qtd']}x {item['Produto']} - R$ {(v_unitario * item['Qtd']):.2f}")
+                
+                st.markdown('</div>', unsafe_allow_html=True)
+                
+                c_limpar, c_vazio = st.columns([1, 3])
+                if c_limpar.button("🗑️ Limpar Carrinho"):
+                    st.session_state["carrinho"] = []
+                    st.rerun()
+
+                st.metric("Total do Carrinho", f"R$ {v_total_pedido:.2f}")
+
+                if tel_cliente:
+                    if st.button("🚀 FINALIZAR E SALVAR"):
+                        taxa = 0.26 if canal == "iFood" else 0.0
+                        lucro_final = (v_total_pedido * (1 - taxa)) - c_total_pedido
+                        string_produtos = " + ".join(nomes_pedido)
+                        
+                        novo = pd.DataFrame([{"Data": data_sel.strftime("%d/%m/%Y"), "Hora": hora_sel.strftime("%H:%M"), "Telefone_Cliente": str(tel_cliente), "Produto": string_produtos, "Canal": canal, "Valor_Bruto": v_total_pedido, "Lucro_Liquido": round(lucro_final, 2)}])
+                        conn.update(worksheet="Vendas", data=pd.concat([load_data().drop(columns=['Data_Formatada'], errors='ignore'), novo], ignore_index=True))
+                        
+                        st.session_state["carrinho"] = [] # Esvazia após salvar
+                        st.success("Venda registrada com sucesso!")
+                        st.balloons()
+                else:
+                    st.warning("Preencha o telefone para liberar a finalização.")
 
         with st.expander("🍔 Editor de Cardápio e Receitas", expanded=False):
             menu_editado = st.data_editor(st.session_state["menu_df"], num_rows="dynamic", use_container_width=True)
@@ -176,6 +218,8 @@ if check_password():
 
             c_g1, c_g2 = st.columns(2)
             with c_g1:
+                # Trata a contagem para quando há multiplos itens na mesma linha ("2x Smash + 1x Refri")
+                # Por hora, o gráfico conta o "Pedido Inteiro" como 1, mas é excelente para ver quais combos saem mais
                 rank = df_f.groupby('Produto').size().reset_index(name='Qtd').sort_values('Qtd')
                 st.plotly_chart(px.bar(rank, x='Qtd', y='Produto', orientation='h', title="Mais Vendidos", color_discrete_sequence=['#FF8C00']), use_container_width=True)
             with c_g2:
